@@ -172,7 +172,19 @@ public class FileProvider {
    }
 
    protected FileChannel openChannel(int fileId) throws FileNotFoundException {
-      return new RandomAccessFile(newFile(fileId), "r").getChannel();
+
+      File file = new File(dataDir, String.valueOf(fileId));
+      int length = 1024*1024; // TODO - wire to config
+
+      log.debugf("openChannel(%s)", file.getAbsolutePath());
+
+      // use persistent memory if available, otherwise fallback to regular file.
+      FileChannel fileChannel = PmemUtil.pmemChannelFor(file, length, false, true);
+      if(fileChannel == null) {
+         fileChannel = new RandomAccessFile(file, "r").getChannel();
+      }
+
+      return fileChannel;
    }
 
    public Log getFileForLog() throws IOException {
@@ -191,7 +203,15 @@ public class FileProvider {
                for (FileIterator it : iterators) {
                   it.add(nextFileId);
                }
-               return new Log(nextFileId, new FileOutputStream(newFile(nextFileId)).getChannel());
+
+               int length = 1024*1024; // TODO - wire to config
+               // use persistent memory if available, otherwise fallback to regular file.
+               FileChannel fileChannel = PmemUtil.pmemChannelFor(f, length, true, false);
+               if(fileChannel == null) {
+                  fileChannel = new FileOutputStream(f).getChannel();
+               }
+
+               return new Log(nextFileId, fileChannel);
             }
          }
       } finally {
